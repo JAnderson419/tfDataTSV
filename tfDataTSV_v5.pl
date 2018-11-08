@@ -60,6 +60,7 @@ open DATA, "<", $fileName;
 
 while (<DATA>) {
     chomp;
+	# Determine which type of measurement this is. Later file syntax is determined by measurement type.
     if ($firstline){
         $type = 0 if /DynamicHysteresisResult/;
         $type = 1 if /Fatigue/;
@@ -68,10 +69,11 @@ while (<DATA>) {
         $firstline = 0;
     }
     s/\t$//;
-    #Skip measurement summary table
+    #Skip reading lines until end of measurement summary table detected
     $summaryTableRead = 1 if /^DynamicHysteresis$/ or /^Data Table/ or /^Pulse$/ or /^Leakage$/;
     next unless $summaryTableRead;
 
+	# Store relavant sample information from table header. Available information depends on measurement type
     $table = $1 if /Table (\[*\d*.*\d*\]*)/;
     $sampleName = $1 if /SampleName: (.*)/;
     if ($type == 0 or $type == 1) {
@@ -92,16 +94,20 @@ while (<DATA>) {
     }
     elsif ($type == 3) {
         $isDataTable = 1 if /^Voltage \[V\]/;
-    }   
+    }
+	# Data table has been reached
     if ($isDataTable){
+		# Define unique save file name based on header info and measurement type
         my $datapath;
         $datapath = "$dirName\\$sampleName $frequency".'Hz '."$amplitude".'V '."$average".'Average Table'."$table".'.tsv' if $type == 0;
         $datapath = "$dirName\\$sampleName $frequency".'Hz '."$amplitude".'V '."$average".'Average Table'."$table $cycles".'Cycles.tsv' if $type == 1;
         $datapath = "$dirName\\$sampleName $frequency".'Hz '."$amplitude".'V Table'."$table".'.tsv' if $type == 2;
         $datapath = "$dirName\\$sampleName $stepDur".'s step '.'Table'."$table".'.tsv' if $type == 3;
-        unless(defined $datapath) {
+        # If path is not defined, code did not recognize measurement type. Print error and close
+		unless(defined $datapath) {
             die "Measurement type not recognized";
-        }    
+        }
+		# First line of data table is header. Substitutions made for some symbols.
         $isDataTableHeader ? (open DATAFILE, ">" , $datapath) : (open DATAFILE, ">>",$datapath);
         if ($isDataTableHeader) {
             $isDataTableHeader = 0;
@@ -111,9 +117,11 @@ while (<DATA>) {
             s/\+/plus/g;
             s/-/minus/g;
         }
+		# Information printed to file
         print DATAFILE;
         print DATAFILE "\n";
         if (/^$/) {
+			# End of table reached, close file and reset data table and data table header flags.
             $isDataTable = 0;
             $isDataTableHeader = 1;
             close DATAFILE;
